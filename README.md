@@ -1,8 +1,48 @@
 # @vaultry/claude-secrets
 
+[![npm version](https://img.shields.io/npm/v/@vaultry/claude-secrets.svg)](https://www.npmjs.com/package/@vaultry/claude-secrets)
+[![npm downloads](https://img.shields.io/npm/dm/@vaultry/claude-secrets.svg)](https://www.npmjs.com/package/@vaultry/claude-secrets)
+[![license](https://img.shields.io/badge/license-Source--available-blue.svg)](./LICENSE.md)
+[![platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#requirements)
+[![node](https://img.shields.io/node/v/@vaultry/claude-secrets.svg)](#requirements)
+
 Secure token storage for Claude Code sessions and your shell/apps. Encrypted on disk, master key in macOS Keychain, per-project allowlist for Claude, unrestricted CLI access for you.
 
-Three interfaces:
+> **Stop pasting tokens into every new Claude session.** Store them once, reference them everywhere — including commit-safe `.env` files.
+
+## Quickstart
+
+```bash
+npm install -g @vaultry/claude-secrets
+claude-secrets-setup                                  # generates master key in Keychain
+claude mcp add claude-secrets --scope user -- claude-secrets-mcp
+
+# Store a token:
+echo "ghp_xxxxxx" | claude-secrets set GITHUB_TOKEN
+
+# Use in .env (commit-safe — refs only, no values):
+echo 'API_KEY=secret://GITHUB_TOKEN' > .env
+
+# Run app with secrets injected:
+claude-secrets exec -- pnpm dev
+```
+
+That's it. Full docs below.
+
+## Table of Contents
+
+- [Three interfaces](#three-interfaces)
+- [Requirements](#requirements)
+- [Install](#install-via-npm)
+- [CLI reference](#1-cli--claude-secrets)
+- [MCP for Claude Code](#2-mcp--for-claude-code)
+- [Workflow examples](#3-workflow-examples)
+- [Slash commands](#slash-commands-claude-code)
+- [Security model](#security)
+- [Troubleshooting](#troubleshooting)
+
+## Three interfaces
+
 1. **MCP server** — Claude Code sessions read/write via tools (policy-gated)
 2. **CLI `claude-secrets`** — your shell, apps, scripts (no policy)
 3. **`.env` placeholders** — `secret://NAME` refs, commit-safe
