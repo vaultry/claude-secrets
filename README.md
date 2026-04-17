@@ -129,7 +129,7 @@ Secrets live only in the child process — not in the parent shell's environment
 
 ## MCP server (for Claude Code)
 
-After registering with `claude mcp add`, Claude Code gets 5 tools under `mcp__claude-secrets__*`:
+After registering with `claude mcp add`, Claude Code gets 6 tools under `mcp__claude-secrets__*`:
 
 | Tool | Policy check | Effect |
 |------|--------------|--------|
@@ -138,6 +138,23 @@ After registering with `claude mcp add`, Claude Code gets 5 tools under `mcp__cl
 | `delete_secret` | yes | Remove or `Denied` |
 | `list_secrets` | filter | `{total, visible, names}` |
 | `search_secrets` | filter | Array of matches (regex, case-insensitive) |
+| `input_secret` | yes | Native macOS dialog prompts user for value → stored directly. Value never passes through the model or chat. |
+
+### `input_secret` — secure user input
+
+Use case: Claude needs a token the user hasn't stored yet. Instead of asking "please paste your token in chat" (which leaks the value into transcripts, API logs, and plan files), Claude calls `input_secret` — a native macOS dialog pops up, user types the value, value goes straight from dialog to encrypted store without Claude ever seeing it.
+
+```
+Claude: "I need a GITEA_TOKEN to push that branch. May I prompt you?"
+User: "yes"
+Claude: [calls input_secret with name=GITEA_TOKEN]
+→ macOS dialog appears on your screen (hidden input)
+→ you type the token, press OK
+→ value stored in encrypted vault
+→ Claude gets back "OK: 'GITEA_TOKEN' stored"
+```
+
+The value never appears in chat, transcripts, or API traffic.
 
 `list` and `search` only return names that pass the allowlist. `total` shows the real count — Claude knows more secrets exist but can't see their names from a non-authorized project.
 

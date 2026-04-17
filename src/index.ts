@@ -5,6 +5,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   getSecret,
   setSecret,
@@ -13,6 +15,18 @@ import {
   searchSecrets,
 } from "./store.js";
 import { isAllowed, allowedNames } from "./policy.js";
+
+const execFileAsync = promisify(execFile);
+
+async function promptForSecretViaDialog(prompt: string): Promise<string | null> {
+  const script = `display dialog "${prompt.replace(/"/g, '\\"')}" default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK"\nreturn text returned of result`;
+  try {
+    const { stdout } = await execFileAsync("osascript", ["-e", script]);
+    return stdout.trimEnd();
+  } catch {
+    return null;
+  }
+}
 
 const CWD = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
@@ -67,6 +81,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["pattern"],
       },
     },
+    {
+      name: "input_secret",
+      description: "Prompt the user for a secret value via a native macOS dialog (hidden input), then store it. The value never passes through the model or the chat — it goes directly from the user's dialog into the encrypted store. Use this when you need a token, password, or API key the user has not yet stored. Requires name to be whitelisted in project .claude/secrets.yml.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Secret name to store under" },
+          prompt: { type: "string", description: "Text shown in the dialog (e.g. 'Paste your GitHub token:')" },
+        },
+        required: ["name"],
+      },
+    },
   ],
 }));
 
@@ -115,6 +141,18 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const matches = await searchSecrets(pattern);
         const visible = await allowedNames(matches, CWD);
         return textResult(JSON.stringify(visible, null, 2));
+      }
+      case "input_secret": {
+        const secretName = String(args?.name ?? "");
+        const promptText = String(args?.prompt ?? `Paste value for ${secretName}:`);
+        if (!secretName) return textResult("name is required", true);
+        const gate = await isAllowed(secretName, CWD);
+        if (!gate.ok) return textResult(`Denied: ${gate.reason}`, true);
+        const value = await promptForSecretViaDialog(promptText);
+        if (value === null) return textResult("User cancelled the dialog", true);
+        if (!value) return textResult("Empty value rejected", true);
+        await setSecret(secretName, value);
+        return textResult(`OK: '${secretName}' stored via dialog (value never passed through model)`);
       }
       default:
         return textResult(`Unknown tool: ${name}`, true);
