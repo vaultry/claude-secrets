@@ -1,6 +1,6 @@
 {
   "name": "@vaultry/claude-secrets",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Encrypted secrets store for Claude Code (MCP) + CLI + .env placeholder expansion. macOS Keychain backed.",
   "license": "SEE LICENSE IN LICENSE.md",
   "author": "Joris Slagter <mail@jorisslagter.nl>",
