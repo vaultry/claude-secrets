@@ -21,7 +21,7 @@ export async function getMasterKey(): Promise<Buffer> {
     return Buffer.from(stdout.trim(), "base64");
   } catch (err: any) {
     throw new Error(
-      `Keychain entry '${KEYCHAIN_SERVICE}' niet gevonden. Run setup CLI eerst.`
+      `Keychain entry '${KEYCHAIN_SERVICE}' not found. Run 'claude-secrets-setup' first.`
     );
   }
 }
@@ -52,7 +52,7 @@ export function encrypt(plaintext: string, key: Buffer): string {
 
 export function decrypt(payload: string, key: Buffer): string {
   const [ivB64, tagB64, ctB64] = payload.split(":");
-  if (!ivB64 || !tagB64 || !ctB64) throw new Error("Ongeldig ciphertext formaat");
+  if (!ivB64 || !tagB64 || !ctB64) throw new Error("Invalid ciphertext format");
   const iv = Buffer.from(ivB64, "base64");
   const tag = Buffer.from(tagB64, "base64");
   const ct = Buffer.from(ctB64, "base64");

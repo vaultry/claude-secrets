@@ -49,7 +49,7 @@ async function main() {
       ].join("\n");
     }
   } catch (err: any) {
-    context = `Secrets hook error: ${err.message}`;
+    context = `claude-secrets hook error: ${err.message}`;
   }
 
   emit({

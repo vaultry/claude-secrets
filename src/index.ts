@@ -86,17 +86,17 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const gate = await isAllowed(secretName, CWD);
         if (!gate.ok) return textResult(`Denied: ${gate.reason}`, true);
         const value = await getSecret(secretName);
-        if (value === undefined) return textResult(`Secret '${secretName}' bestaat niet`, true);
+        if (value === undefined) return textResult(`Secret '${secretName}' not found`, true);
         return textResult(value);
       }
       case "set_secret": {
         const secretName = String(args?.name ?? "");
         const value = String(args?.value ?? "");
-        if (!secretName) return textResult("name verplicht", true);
+        if (!secretName) return textResult("name is required", true);
         const gate = await isAllowed(secretName, CWD);
         if (!gate.ok) return textResult(`Denied: ${gate.reason}`, true);
         await setSecret(secretName, value);
-        return textResult(`OK: '${secretName}' opgeslagen`);
+        return textResult(`OK: '${secretName}' stored`);
       }
       case "list_secrets": {
         const all = await listSecretNames();
@@ -108,7 +108,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const gate = await isAllowed(secretName, CWD);
         if (!gate.ok) return textResult(`Denied: ${gate.reason}`, true);
         const removed = await deleteSecret(secretName);
-        return textResult(removed ? `OK: '${secretName}' verwijderd` : `'${secretName}' bestond niet`);
+        return textResult(removed ? `OK: '${secretName}' removed` : `'${secretName}' did not exist`);
       }
       case "search_secrets": {
         const pattern = String(args?.pattern ?? "");
@@ -117,7 +117,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return textResult(JSON.stringify(visible, null, 2));
       }
       default:
-        return textResult(`Onbekende tool: ${name}`, true);
+        return textResult(`Unknown tool: ${name}`, true);
     }
   } catch (err: any) {
     return textResult(`Error: ${err.message ?? String(err)}`, true);

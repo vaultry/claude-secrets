@@ -27,19 +27,19 @@ export async function isAllowed(name: string, cwd: string): Promise<{ ok: boolea
   if (!policy) {
     return {
       ok: false,
-      reason: `Geen .claude/secrets.yml in ${cwd}. Maak bestand met 'allow: [${name}]' om toegang te geven.`,
+      reason: `No .claude/secrets.yml in ${cwd}. Create one with 'allow: [${name}]' to grant access.`,
     };
   }
   if (policy.allow === "*") return { ok: true };
   if (!Array.isArray(policy.allow) || policy.allow.length === 0) {
-    return { ok: false, reason: "secrets.yml heeft geen 'allow' lijst" };
+    return { ok: false, reason: "secrets.yml has no 'allow' list" };
   }
   for (const pattern of policy.allow) {
     if (globToRegex(pattern).test(name)) return { ok: true };
   }
   return {
     ok: false,
-    reason: `'${name}' niet in allow-lijst van ${cwd}/.claude/secrets.yml`,
+    reason: `'${name}' not in allow-list of ${cwd}/.claude/secrets.yml`,
   };
 }
 

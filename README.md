@@ -1,49 +1,19 @@
-# Claude Secrets
+# @vaultry/claude-secrets
 
-Veilige token opslag voor Claude Code sessies én je shell/apps. Encrypted op disk, key in macOS Keychain, per-project allowlist voor Claude, vrije CLI toegang voor jou.
+Secure token storage for Claude Code sessions and your shell/apps. Encrypted on disk, master key in macOS Keychain, per-project allowlist for Claude, unrestricted CLI access for you.
 
-Drie ingangen:
-1. **MCP server** — Claude Code sessies lezen/schrijven via tools (policy-gated)
-2. **CLI `claude-secrets`** — jouw shell, apps, scripts (geen policy)
+Three interfaces:
+1. **MCP server** — Claude Code sessions read/write via tools (policy-gated)
+2. **CLI `claude-secrets`** — your shell, apps, scripts (no policy)
 3. **`.env` placeholders** — `secret://NAME` refs, commit-safe
 
-## Waarom
+## Why
 
-Voorkomt dat tokens (GITEA, GitHub, API keys, DB passwords) telkens opnieuw geplakt moeten worden. `.env` bestanden kunnen in git zonder lek (bevatten alleen refs). Master key in Keychain, synct over iCloud.
-
-## Architectuur
-
-```
-~/.claude/
-├── secrets.encrypted                  # AES-256-GCM, mode 0600
-└── mcp-servers/secrets/
-    ├── src/
-    │   ├── index.ts                   # MCP server (stdio)
-    │   ├── crypto.ts                  # AES-256-GCM + Keychain I/O
-    │   ├── store.ts                   # read/write secrets.encrypted
-    │   ├── policy.ts                  # isAllowed() via secrets.yml
-    │   ├── dotenv.ts                  # .env parser + placeholder expand
-    │   └── bin/
-    │       ├── setup.ts               # init CLI
-    │       ├── session-hook.ts        # SessionStart hook
-    │       └── cli.ts                 # claude-secrets CLI
-    └── dist/                          # compiled JS
-
-~/.local/bin/claude-secrets            # symlink naar dist/bin/cli.js
-```
-
-**Encryptie**
-- Algoritme: AES-256-GCM (authenticated encryption, tamper detection)
-- IV: 12 bytes, random per write
-- Key: 32 bytes, in macOS Keychain onder service `claude-secrets-mcp`, account `master-key`
-- Bestandsformaat: `{iv_b64}:{authtag_b64}:{ciphertext_b64}`
-- Payload na decrypt: JSON object `{name: value}`
-
-**Syncing**: iCloud Keychain synct de master key tussen Macs. `secrets.encrypted` kun je zelf syncen (Dropbox, iCloud Drive, git-crypt, etc.) — zonder key is hij onbruikbaar.
+Stop pasting tokens (GITEA, GitHub, API keys, DB passwords) into every new Claude session. `.env` files become safe to commit (they contain only refs). The master key lives in the Keychain and syncs across Macs via iCloud Keychain.
 
 ## Requirements
 
-- macOS (gebruikt `security` CLI voor Keychain)
+- macOS (uses the `security` CLI for Keychain access)
 - Node.js ≥ 18
 
 ## Install via npm
@@ -51,10 +21,10 @@ Voorkomt dat tokens (GITEA, GitHub, API keys, DB passwords) telkens opnieuw gepl
 ```bash
 npm install -g @vaultry/claude-secrets
 
-# Eenmalige setup (Keychain entry + leeg encrypted bestand):
+# One-time setup (generates master key + empty encrypted file):
 claude-secrets-setup
 
-# Registreer MCP bij Claude Code:
+# Register the MCP server with Claude Code:
 claude mcp add claude-secrets --scope user -- claude-secrets-mcp
 ```
 
@@ -70,9 +40,174 @@ claude mcp add claude-secrets --scope user -- node $(pwd)/dist/index.js
 ln -sf $(pwd)/dist/bin/cli.js ~/.local/bin/claude-secrets
 ```
 
-## SessionStart Hook (optioneel)
+## Architecture
 
-Voor auto-injection van secret namen bij sessie start — voeg toe aan `~/.claude/settings.json`:
+```
+~/.claude/
+├── secrets.encrypted                   # AES-256-GCM, mode 0600
+└── (when installed from source)
+    └── mcp-servers/secrets/
+        ├── src/
+        │   ├── index.ts                # MCP server (stdio)
+        │   ├── crypto.ts               # AES-256-GCM + Keychain I/O
+        │   ├── store.ts                # read/write secrets.encrypted
+        │   ├── policy.ts               # isAllowed() via secrets.yml
+        │   ├── dotenv.ts               # .env parser + placeholder expansion
+        │   └── bin/
+        │       ├── setup.ts            # init CLI
+        │       ├── session-hook.ts     # SessionStart hook
+        │       └── cli.ts              # claude-secrets CLI
+        └── dist/                       # compiled JS
+```
+
+**Encryption**
+- Algorithm: AES-256-GCM (authenticated encryption, tamper detection)
+- IV: 12 bytes, random per write
+- Key: 32 bytes, stored in macOS Keychain under service `claude-secrets-mcp`, account `master-key`
+- File format: `{iv_b64}:{authtag_b64}:{ciphertext_b64}`
+- Decrypted payload: JSON object `{name: value}`
+- Writes are atomic (write-to-temp + rename)
+
+**Sync**: iCloud Keychain syncs the master key across Macs. You can sync `secrets.encrypted` yourself (Dropbox, iCloud Drive, git-crypt, etc.) — it's useless without the key.
+
+---
+
+## 1. CLI — `claude-secrets`
+
+```
+claude-secrets help
+
+  get <name>                         Print secret to stdout
+  set <name> [value]                 Store secret (value from stdin if not given)
+  delete|rm <name>                   Delete a secret
+  list|ls                            List all secret names (sorted)
+  search <pattern>                   Regex search (case insensitive)
+
+  export [--file .env]               Print 'export KEY=VAL' lines for shell eval
+    [--format shell|dotenv|json]     Default: shell
+    [--on-missing throw|empty|keep]  Default: throw
+
+  exec [--file .env] -- <cmd...>     Run cmd with expanded env from .env
+    [--on-missing throw|empty|keep]  Default: throw
+```
+
+### Managing secrets
+
+```bash
+# From stdin (safer — not in shell history):
+echo "ghp_xxxxxx" | claude-secrets set GITHUB_TOKEN
+
+# From 1Password:
+op read "op://Private/Gitea/token" | claude-secrets set GITEA_TOKEN
+
+# Interactive (type value, Ctrl-D):
+claude-secrets set DB_PASSWORD
+
+# Inline (VISIBLE in shell history — avoid for real secrets):
+claude-secrets set TEST_VAR some-value
+
+# Read:
+claude-secrets get GITEA_TOKEN
+
+# List + search:
+claude-secrets list
+claude-secrets search '^GITHUB'
+
+# Delete:
+claude-secrets rm OLD_TOKEN
+```
+
+### `.env` with placeholders
+
+```bash
+# .env (commit-safe — no real values)
+API_KEY=secret://GITHUB_TOKEN
+DB_URL=postgres://user:secret://DB_PASSWORD@db.host/myapp
+PLAIN_VAR=no-secret-here
+REDIS_HOST=localhost
+```
+
+Placeholder syntax: `secret://NAME` (URI-style, no conflict with bash parameter expansion). Names may contain `A-Z`, `0-9`, `_`, `.`, `-`.
+
+### Load into shell
+
+```bash
+# Put all values in your current shell:
+eval "$(claude-secrets export)"
+echo $API_KEY                                    # resolved
+
+# Different file:
+eval "$(claude-secrets export --file .env.prod)"
+
+# JSON for scripts:
+claude-secrets export --format json > resolved.json
+
+# Resolved dotenv for tools that don't understand refs:
+claude-secrets export --format dotenv > .env.resolved
+```
+
+### Run a command with secrets
+
+```bash
+claude-secrets exec -- pnpm dev                  # secrets as env vars
+claude-secrets exec -- node build.js
+claude-secrets exec --file .env.staging -- npm run deploy
+
+# Secrets exist only in the child process — not in parent shell env or history
+```
+
+### Missing-secret behavior
+
+| `--on-missing` | Behavior |
+|----------------|----------|
+| `throw` (default) | Exit 1 with list of missing names |
+| `empty` | Placeholder becomes an empty string |
+| `keep` | Placeholder left literal (`secret://NAME`) |
+
+---
+
+## 2. MCP — for Claude Code
+
+Available after a Claude session restart as `mcp__claude-secrets__*`:
+
+| Tool | Input | Policy check | Effect |
+|------|-------|--------------|--------|
+| `set_secret` | `name`, `value` | yes | Store/overwrite (requires allowlist) |
+| `get_secret` | `name` | yes | Returns value or `Denied` |
+| `delete_secret` | `name` | yes | Removes or `Denied` |
+| `list_secrets` | — | filter | `{total, visible, names}` |
+| `search_secrets` | `pattern` (regex) | filter | Array of matches |
+
+`list` and `search` only return names that pass the allowlist. `total` shows the real count so Claude knows more secrets exist but can't see their names.
+
+### Policy — `.claude/secrets.yml`
+
+Per project. Without this file: **all MCP reads and writes blocked** — prevents Claude in project A from accidentally reading or overwriting secrets from project B. The CLI bypasses policy (you as a user have full access).
+
+```yaml
+allow:
+  - GITEA_TOKEN
+  - GITHUB_*            # glob patterns supported
+  - OP_SERVICE_*
+```
+
+Special values:
+
+```yaml
+allow: "*"              # allow everything (not recommended)
+```
+
+```yaml
+allow:
+  - GITEA_TOKEN
+inject_values: true     # SessionStart hook also injects values
+```
+
+`secrets.yml` is safe to commit — it contains only names, no values.
+
+### SessionStart Hook
+
+Add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -91,178 +226,39 @@ Voor auto-injection van secret namen bij sessie start — voeg toe aan `~/.claud
 }
 ```
 
-(Command is beschikbaar na `npm install -g`. Voor source install: vervang door pad naar `dist/bin/session-hook.js`.)
+Runs at each Claude Code session start with the project CWD:
+
+- No `.claude/secrets.yml` → nothing injected
+- With an allowlist → injects the names of visible secrets plus a hint to use `get_secret`
+- With `inject_values: true` → also injects values into the system prompt (opt-in per project)
+
+Values injected this way end up in transcripts, `history.jsonl`, plan files, and API logs. Only use this for short-lived tokens in trusted projects.
 
 ---
 
-## 1. CLI — `claude-secrets`
+## 3. Workflow examples
 
-```
-claude-secrets help
-
-  get <name>                         Print secret naar stdout
-  set <name> [value]                 Store (value uit stdin als niet meegegeven)
-  delete|rm <name>                   Verwijder
-  list|ls                            Alle namen (gesorteerd)
-  search <pattern>                   Regex zoeken (case insensitive)
-
-  export [--file .env]               'export KEY=VAL' regels voor shell eval
-    [--format shell|dotenv|json]     Default: shell
-    [--on-missing throw|empty|keep]  Default: throw
-
-  exec [--file .env] -- <cmd...>     Run cmd met geëxpandeerde env
-    [--on-missing throw|empty|keep]  Default: throw
-```
-
-### Secrets beheren
-
-```bash
-# Uit stdin (safer — niet in shell history):
-echo "ghp_xxxxxx" | claude-secrets set GITHUB_TOKEN
-
-# Uit 1Password:
-op read "op://Private/Gitea/token" | claude-secrets set GITEA_TOKEN
-
-# Interactief (tikt waarde, Ctrl-D):
-claude-secrets set DB_PASSWORD
-
-# Inline (ZICHTBAAR in shell history — vermijd voor echte secrets):
-claude-secrets set TEST_VAR some-value
-
-# Lezen:
-claude-secrets get GITEA_TOKEN
-
-# Lijst + zoeken:
-claude-secrets list
-claude-secrets search '^GITHUB'
-
-# Verwijderen:
-claude-secrets rm OLD_TOKEN
-```
-
-### `.env` met placeholders
-
-```bash
-# .env (commit-safe — geen echte waarden)
-API_KEY=secret://GITHUB_TOKEN
-DB_URL=postgres://user:secret://DB_PASSWORD@db.host/myapp
-PLAIN_VAR=no-secret-here
-REDIS_HOST=localhost
-```
-
-Placeholder syntax: `secret://NAME` (URI-style, geen bash parameter-expansion conflict). Namen mogen `A-Z`, `0-9`, `_`, `.`, `-`.
-
-### Load in shell
-
-```bash
-# Alles in je huidige shell zetten:
-eval "$(claude-secrets export)"
-echo $API_KEY                                    # resolved
-
-# Andere file:
-eval "$(claude-secrets export --file .env.prod)"
-
-# JSON voor scripts:
-claude-secrets export --format json > resolved.json
-
-# dotenv (resolved) voor tools die geen refs begrijpen:
-claude-secrets export --format dotenv > .env.resolved
-```
-
-### Run command met secrets
-
-```bash
-claude-secrets exec -- pnpm dev                  # secrets als env vars
-claude-secrets exec -- node build.js
-claude-secrets exec --file .env.staging -- npm run deploy
-
-# Secrets blijven alleen in child process — niet in parent shell env of history
-```
-
-### Missing-secret gedrag
-
-| `--on-missing` | Gedrag |
-|----------------|--------|
-| `throw` (default) | Exit 1 met lijst van missing namen |
-| `empty` | Placeholder wordt lege string |
-| `keep` | Placeholder blijft letterlijk staan (`secret://NAME`) |
-
----
-
-## 2. MCP — voor Claude Code
-
-Na Claude sessie herstart beschikbaar als `mcp__claude-secrets__*`:
-
-| Tool | Input | Policy check | Effect |
-|------|-------|--------------|--------|
-| `set_secret` | `name`, `value` | ja | Store/overwrite (vereist allowlist) |
-| `get_secret` | `name` | ja | Return value of `Denied` |
-| `delete_secret` | `name` | ja | Remove of `Denied` |
-| `list_secrets` | — | filter | `{total, visible, names}` |
-| `search_secrets` | `pattern` (regex) | filter | Array met matches |
-
-`list`/`search` tonen alleen namen die door de allowlist heen komen. `total` geeft het echte aantal (Claude weet dat er meer is, maar niet welke namen).
-
-### Policy — `.claude/secrets.yml`
-
-Per project. Zonder bestand: **alle reads én writes via MCP geblokkeerd** — voorkomt dat Claude in project A per ongeluk secrets van project B leest of overschrijft. CLI bypasst policy (jij als user hebt volledige toegang).
-
-```yaml
-allow:
-  - GITEA_TOKEN
-  - GITHUB_*            # glob patterns ondersteund
-  - OP_SERVICE_*
-```
-
-Speciale waarden:
-
-```yaml
-allow: "*"              # alles toegestaan (niet aangeraden)
-```
-
-```yaml
-allow:
-  - GITEA_TOKEN
-inject_values: true     # SessionStart hook injecteert ook waarden
-```
-
-`secrets.yml` veilig om te committen — bevat alleen namen, geen waarden.
-
-### SessionStart Hook
-
-Geregistreerd in `~/.claude/settings.json`. Draait bij elke Claude Code sessie start met project CWD:
-
-- Geen `.claude/secrets.yml` → niets injecteren
-- Met allowlist → injecteert namen van beschikbare secrets + hint om `get_secret` te gebruiken
-- Met `inject_values: true` → injecteert ook waarden in system prompt (opt-in per project)
-
-Values injecteren belandt in transcripts, `history.jsonl`, plan files. Alleen gebruiken waar echt nodig (bv. short-lived dev tokens in trusted projects).
-
----
-
-## 3. Workflow voorbeelden
-
-### Nieuw project met Gitea + database
+### New project with Gitea + database
 
 ```bash
 cd ~/projects/new-thing
 git init
 
-# Secrets al in store? Check:
+# Secrets already stored? Check:
 claude-secrets search 'GITEA|DB'
 
-# Nog niet? Voeg toe:
+# No? Add them:
 op read "op://Private/Gitea/token" | claude-secrets set GITEA_TOKEN
-claude-secrets set DB_PASSWORD              # typ in, Ctrl-D
+claude-secrets set DB_PASSWORD              # type in, Ctrl-D
 
-# .env committen-safe:
+# Commit-safe .env:
 cat > .env <<EOF
 GITEA_TOKEN=secret://GITEA_TOKEN
 DATABASE_URL=postgres://app:secret://DB_PASSWORD@localhost:5432/mydb
 PORT=3000
 EOF
 
-# Claude toegang (optioneel — alleen als Claude tokens moet lezen):
+# Give Claude access (optional — only if Claude needs to read tokens):
 mkdir -p .claude
 cat > .claude/secrets.yml <<EOF
 allow:
@@ -270,11 +266,11 @@ allow:
   - DB_PASSWORD
 EOF
 
-# Dev server met secrets:
+# Dev server with secrets injected:
 claude-secrets exec -- pnpm dev
 ```
 
-### Package.json scripts
+### package.json scripts
 
 ```json
 {
@@ -286,7 +282,7 @@ claude-secrets exec -- pnpm dev
 }
 ```
 
-### Shell init (optioneel — voor default loading)
+### Shell init (optional — default loading)
 
 ```bash
 # ~/.zshrc
@@ -297,57 +293,74 @@ fi
 
 ---
 
-## Troubleshooting
+## Slash commands (Claude Code)
 
-**"Keychain entry niet gevonden"**
-Setup niet gedraaid. Run `node ~/.claude/mcp-servers/secrets/dist/bin/setup.js`.
+Included in `commands/` and discoverable when installed in `~/.claude/commands/`:
 
-**"Ongeldig ciphertext formaat"**
-`secrets.encrypted` corrupt of met andere key versleuteld. Restore van backup of delete + opnieuw beginnen.
+- `/secret-set <NAME> [prompt]` — native macOS dialog (hidden input) → `claude-secrets set`
+- `/secret-get <NAME>` — `claude-secrets get` → clipboard + notification, value never appears in chat
 
-**Keychain prompt bij elke read**
-Normaal bij eerste sessie na login. Vink "Always Allow" aan. Als herhalend: Keychain Access app → zoek `claude-secrets-mcp` → rechtermuis → Access Control → voeg `node` binary toe.
+Symlink to make them available:
 
-**"claude-secrets: command not found"**
-`~/.local/bin` niet in PATH, of symlink weg. Fix:
 ```bash
-ln -sf ~/.claude/mcp-servers/secrets/dist/bin/cli.js ~/.local/bin/claude-secrets
+ln -sf $(npm root -g)/@vaultry/claude-secrets/commands/secret-set.md ~/.claude/commands/secret-set.md
+ln -sf $(npm root -g)/@vaultry/claude-secrets/commands/secret-get.md ~/.claude/commands/secret-get.md
 ```
-
-**MCP niet zichtbaar in Claude**
-```bash
-claude mcp list | grep claude-secrets      # moet "✓ Connected" tonen
-```
-Zo niet: Claude sessie herstarten.
-
-**Secret in `.env` maar expansie faalt**
-Check: `claude-secrets get NAME` — bestaat? Naam match case-sensitive. Placeholder syntax exact `secret://` (niet `@secrets:` of `${secrets:}`).
-
-**Logs**
-MCP server errors naar stderr → `~/.claude/debug/` in Claude Code.
 
 ---
 
-## Beveiliging
+## Troubleshooting
 
-**Wel veilig**:
-- Master key buiten encrypted bestand (in Keychain, user-locked)
-- Per-project allowlist blokkeert cross-project lekkage via Claude
-- AES-256-GCM detecteert tampering
-- File mode 0600 (alleen owner)
-- Placeholder refs in `.env` = commit-safe
-- `exec --` pattern houdt secrets uit shell history en `ps` output
+**"Keychain entry not found"**
+Setup wasn't run. Run `claude-secrets-setup`.
 
-**Let op**:
-- `inject_values: true` zet waarden in Claude system prompt → belandt in transcripts en history
-- CLI bypasst policy — iedereen met jouw user ID + unlocked Mac kan alle secrets lezen (correct gedrag, dat's wat Keychain beschermt)
-- Keychain ACL: na eerste "Always Allow" kan `node` waarde zonder prompt lezen
-- MCP writes geblokkeerd zonder allowlist (sinds v0.1) — voorkomt cross-project overwrites
+**"Invalid ciphertext format"**
+`secrets.encrypted` is corrupt or was encrypted with a different key. Restore from backup or delete and start over.
 
-**Niet tegen bedoeld**:
-- Malicious lokale processen draaiend als jouw user
-- Fysieke toegang tot unlocked Mac
-- Compromised Keychain (root-level malware)
+**Keychain prompt on every read**
+Normal on the first session after login. Check "Always Allow". If it keeps prompting: open Keychain Access → search `claude-secrets-mcp` → right-click → Access Control → add the `node` binary.
+
+**`claude-secrets: command not found`**
+`~/.local/bin` not on PATH (source install) or npm global bin not on PATH. Fix:
+```bash
+export PATH="$HOME/.local/bin:$(npm bin -g):$PATH"
+```
+
+**MCP not visible in Claude**
+```bash
+claude mcp list | grep claude-secrets      # should show "✓ Connected"
+```
+If not: restart the Claude session.
+
+**Secret in `.env` but expansion fails**
+Check: `claude-secrets get NAME` — does it exist? Name match is case-sensitive. Placeholder syntax must be exactly `secret://` (not `@secrets:` or `${secrets:}`).
+
+**Logs**
+MCP server errors go to stderr → `~/.claude/debug/` in Claude Code.
+
+---
+
+## Security
+
+**Protects against**:
+- Master key lives outside the encrypted file (in Keychain, user-locked)
+- Per-project allowlist blocks cross-project leakage via Claude
+- AES-256-GCM detects tampering
+- File mode 0600 (owner-only)
+- Atomic writes (write-to-temp + rename) — no partial-state corruption
+- Placeholder refs in `.env` → commit-safe
+- `exec --` pattern keeps secrets out of shell history and `ps` output
+
+**Watch out for**:
+- `inject_values: true` puts values in Claude's system prompt → they appear in transcripts, `history.jsonl`, plan files, and API logs
+- The CLI bypasses policy — anyone with your user ID and an unlocked Mac can read all secrets (this is correct: Keychain is what protects you)
+- Keychain ACL: after the first "Always Allow", `node` can read the key without a prompt
+- MCP writes blocked without allowlist (since v0.1) — prevents cross-project overwrites
+
+**Not a defense against**:
+- Malicious local processes running as your user
+- Physical access to an unlocked Mac
+- A compromised Keychain (root-level malware)
 
 ---
 
@@ -357,8 +370,17 @@ MCP server errors naar stderr → `~/.claude/debug/` in Claude Code.
 claude mcp remove claude-secrets --scope user
 security delete-generic-password -s claude-secrets-mcp -a master-key
 rm ~/.claude/secrets.encrypted
-rm ~/.local/bin/claude-secrets
-rm -rf ~/.claude/mcp-servers/secrets
+npm uninstall -g @vaultry/claude-secrets
 
-# settings.json: verwijder regel met session-hook.js uit SessionStart hooks
+# Remove the session-hook line from ~/.claude/settings.json manually
+# Remove slash command symlinks if created:
+rm -f ~/.claude/commands/secret-set.md ~/.claude/commands/secret-get.md
 ```
+
+---
+
+## License
+
+Source-available under the **Vaultry Source-Available License v1.0**. Free for personal, educational, and internal use. Commercial use (resale, SaaS, bundled products) requires a separate commercial license — contact **mail@jorisslagter.nl**.
+
+See `LICENSE.md` for full terms.

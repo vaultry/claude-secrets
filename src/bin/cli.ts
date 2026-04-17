@@ -12,34 +12,34 @@ import {
 } from "../store.js";
 import { resolveDotenvFile, expandPlaceholders } from "../dotenv.js";
 
-const HELP = `claude-secrets — CLI voor encrypted secrets store
+const HELP = `claude-secrets — CLI for the encrypted secrets store
 
 Subcommands:
-  get <name>                    Print secret waarde naar stdout
-  set <name> [value]            Store secret (value uit stdin als niet meegegeven)
-  delete|rm <name>              Verwijder secret
-  list|ls                       Lijst alle secret namen
-  search <pattern>              Zoek op regex (case insensitive)
+  get <name>                    Print secret value to stdout
+  set <name> [value]            Store secret (value from stdin if not given)
+  delete|rm <name>              Delete secret
+  list|ls                       List all secret names
+  search <pattern>              Regex search (case insensitive)
 
-  export [--file .env]          Print 'export KEY=VAL' regels voor shell eval
+  export [--file .env]          Print 'export KEY=VAL' lines for shell eval
     [--format shell|dotenv|json]   Default: shell
     [--on-missing throw|empty|keep] Default: throw
 
-  exec [--file .env] -- <cmd...>   Run cmd met geëxpandeerde env uit .env
+  exec [--file .env] -- <cmd...>   Run cmd with expanded env from .env
     [--on-missing throw|empty|keep] Default: throw
 
-  help                          Dit scherm
+  help                          Show this screen
 
 Placeholder syntax in .env:
   API_KEY=secret://MY_SECRET_NAME
   DB_URL=postgres://user:secret://DB_PASS@host/db
 
-Voorbeelden:
-  claude-secrets set GITEA_TOKEN                        # waarde uit stdin
+Examples:
+  claude-secrets set GITEA_TOKEN                        # value from stdin
   op read "op://Private/Gitea/token" | claude-secrets set GITEA_TOKEN
   claude-secrets get GITEA_TOKEN
-  eval "$(claude-secrets export)"                        # load .env in shell
-  claude-secrets exec -- pnpm dev                        # run met secrets
+  eval "$(claude-secrets export)"                        # load .env into shell
+  claude-secrets exec -- pnpm dev                        # run with secrets
   claude-secrets exec --file .env.prod -- node build.js
 `;
 
@@ -79,7 +79,7 @@ function shellEscape(v: string): string {
 
 async function cmdGet(name: string) {
   const v = await getSecret(name);
-  if (v === undefined) { process.stderr.write(`Secret '${name}' niet gevonden\n`); process.exit(1); }
+  if (v === undefined) { process.stderr.write(`Secret '${name}' not found\n`); process.exit(1); }
   process.stdout.write(v);
   if (process.stdout.isTTY) process.stdout.write("\n");
 }
@@ -87,17 +87,17 @@ async function cmdGet(name: string) {
 async function cmdSet(name: string, value?: string) {
   let v = value;
   if (v === undefined) {
-    if (process.stdin.isTTY) { process.stderr.write(`Typ waarde voor ${name} (Enter eindigt):\n`); }
+    if (process.stdin.isTTY) { process.stderr.write(`Type value for ${name} (Ctrl-D to finish):\n`); }
     v = await readStdin();
   }
-  if (!v) { process.stderr.write("Lege waarde geweigerd\n"); process.exit(1); }
+  if (!v) { process.stderr.write("Empty value rejected\n"); process.exit(1); }
   await setSecret(name, v);
-  process.stderr.write(`OK: '${name}' opgeslagen\n`);
+  process.stderr.write(`OK: '${name}' stored\n`);
 }
 
 async function cmdDelete(name: string) {
   const removed = await deleteSecret(name);
-  process.stderr.write(removed ? `OK: '${name}' verwijderd\n` : `'${name}' bestond niet\n`);
+  process.stderr.write(removed ? `OK: '${name}' removed\n` : `'${name}' did not exist\n`);
   if (!removed) process.exit(1);
 }
 
@@ -127,11 +127,11 @@ async function cmdExport(flags: Record<string, string>) {
     for (const [k, v] of Object.entries(env)) process.stdout.write(`${k}=${v}\n`);
   } else if (format === "json") {
     process.stdout.write(JSON.stringify(env, null, 2) + "\n");
-  } else { process.stderr.write(`Onbekend format: ${format}\n`); process.exit(1); }
+  } else { process.stderr.write(`Unknown format: ${format}\n`); process.exit(1); }
 }
 
 async function cmdExec(flags: Record<string, string>, tail: string[]) {
-  if (tail.length === 0) { process.stderr.write("Geen command opgegeven na --\n"); process.exit(1); }
+  if (tail.length === 0) { process.stderr.write("No command given after --\n"); process.exit(1); }
   const file = resolve(flags.file ?? ".env");
   const onMissing = (flags["on-missing"] ?? "throw") as OnMissing;
   const store = await readStore();
@@ -142,7 +142,7 @@ async function cmdExec(flags: Record<string, string>, tail: string[]) {
     env = resolved.env; missing = resolved.missing;
   } catch (err: any) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    process.stderr.write(`Warning: ${file} niet gevonden — run zonder .env expansie\n`);
+    process.stderr.write(`Warning: ${file} not found — running without .env expansion\n`);
   }
   if (missing.length && onMissing === "throw") {
     process.stderr.write(`Missing secrets: ${missing.join(", ")}\n`);
@@ -182,7 +182,7 @@ async function main() {
     case "exec":
       await cmdExec(flags, tail); break;
     default:
-      process.stderr.write(`Onbekend subcommand: ${sub}\n`);
+      process.stderr.write(`Unknown subcommand: ${sub}\n`);
       usage(1);
   }
 }
