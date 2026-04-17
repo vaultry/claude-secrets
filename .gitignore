@@ -10,3 +10,5 @@ secrets.encrypted
 .npmrc
 coverage/
 .claude/
+.vhs/palette*.png
+.vhs/*.mp4
