@@ -142,6 +142,8 @@ After registering with `claude mcp add`, Claude Code gets 6 tools under `mcp__cl
 
 ### `input_secret` — secure user input
 
+![input_secret demo](./docs/claude-input.gif)
+
 Use case: Claude needs a token the user hasn't stored yet. Instead of asking "please paste your token in chat" (which leaks the value into transcripts, API logs, and plan files), Claude calls `input_secret` — a native macOS dialog pops up, user types the value, value goes straight from dialog to encrypted store without Claude ever seeing it.
 
 ```
