@@ -1,7 +1,7 @@
 Output ../.vhs/intro.mp4
 
 Set Shell "bash"
-Set FontSize 18
+Set FontSize 12
 Set Width 638
 Set Height 430
 Set Theme "Catppuccin Mocha"
