@@ -1,0 +1,9 @@
+src/
+.gitignore
+.vscode/
+*.tsbuildinfo
+node_modules/
+coverage/
+.DS_Store
+pnpm-lock.yaml
+tsconfig.json
