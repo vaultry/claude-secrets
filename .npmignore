@@ -1,5 +1,6 @@
 src/
 .gitignore
+.vhs/
 .vscode/
 *.tsbuildinfo
 node_modules/

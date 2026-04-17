@@ -41,7 +41,8 @@
     "dist",
     "commands",
     "LICENSE.md",
-    "README.md"
+    "README.md",
+    "demo.gif"
   ],
   "scripts": {
     "build": "tsc && chmod +x dist/index.js dist/bin/setup.js dist/bin/cli.js dist/bin/session-hook.js",

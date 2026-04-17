@@ -10,6 +10,8 @@ Secure token storage for Claude Code sessions and your shell/apps. Encrypted on 
 
 > **Stop pasting tokens into every new Claude session.** Store them once, reference them everywhere — including commit-safe `.env` files.
 
+![Demo](./demo.gif)
+
 ## Quickstart
 
 ```bash
