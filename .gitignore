@@ -9,3 +9,4 @@ secrets.encrypted
 *.tsbuildinfo
 .npmrc
 coverage/
+.claude/
