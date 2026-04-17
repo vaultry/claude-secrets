@@ -1,6 +1,6 @@
 {
   "name": "@vaultry/claude-secrets",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Encrypted secrets store for Claude Code (MCP) + CLI + .env placeholder expansion. macOS Keychain backed.",
   "license": "SEE LICENSE IN LICENSE.md",
   "author": "Joris Slagter <mail@jorisslagter.nl>",
@@ -40,9 +40,9 @@
   "files": [
     "dist",
     "commands",
+    "docs",
     "LICENSE.md",
-    "README.md",
-    "demo.gif"
+    "README.md"
   ],
   "scripts": {
     "build": "tsc && chmod +x dist/index.js dist/bin/setup.js dist/bin/cli.js dist/bin/session-hook.js",
