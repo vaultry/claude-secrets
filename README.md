@@ -1,6 +1,6 @@
 <div align="center">
 
-![Claude Secrets](./docs/claude-input.gif)
+![Claude Secrets](./docs/claude-input.gif?v=2)
 
 # @vaultry/claude-secrets
 
